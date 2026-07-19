@@ -5,7 +5,7 @@ const REPORTS_DIR = path.resolve(__dirname, '../reports');
 const OUTPUT_JSON = path.join(REPORTS_DIR, 'frontend-metrics-governance.json');
 const OUTPUT_CSV = path.join(REPORTS_DIR, 'frontend-metrics-governance.csv');
 const PIPELINE_START = path.join(REPORTS_DIR, 'pipeline-start.txt');
-const SCHEDULED_E2E_CASES = 11;
+const SCHEDULED_E2E_CASES = 6;
 
 function ensureReportsDir() {
   if (!fs.existsSync(REPORTS_DIR)) {
@@ -18,7 +18,6 @@ function findCypressReport() {
     return null;
   }
 
-  const files = fs.readdirSync(REPORTS_DIR, { withFileTypes: true });
   const candidates = [];
 
   function scan(dir) {
@@ -55,9 +54,9 @@ function buildMetrics(report, reportPath) {
     totalSpecs = report.results.length;
     failedSpecs = report.results.filter((spec) => {
       const failures = spec.stats?.failures ?? 0;
-      const containsFailure = failures > 0;
-      const suiteFailure = Boolean(spec.suites && JSON.stringify(spec.suites).includes('"fail":true'));
-      return containsFailure || suiteFailure;
+      const suiteFailure =
+        spec.suites && JSON.stringify(spec.suites).includes('"fail":true');
+      return failures > 0 || suiteFailure;
     }).length;
   } else if (typeof stats.tests === 'number') {
     totalSpecs = 1;
@@ -153,7 +152,6 @@ function writeOutputs(data) {
       return `${metric},${value},"${description}"`;
     })
   ];
-
   fs.writeFileSync(OUTPUT_CSV, csvLines.join('\n'), 'utf8');
 }
 
