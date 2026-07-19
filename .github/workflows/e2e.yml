@@ -104,25 +104,7 @@ jobs:
           echo "REPORTS DIR CONTENTS:"
           find reports -maxdepth 1 -type f | sort
 
-      - name: Generate Frontend Metrics
-        run: npm run frontend-metrics
-
-      - name: Upload Cypress and Metrics Artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: frontend-metrics
-          path: |
-            reports/cypress-report-merged.json
-            reports/cypress-report*.json
-            reports/frontend-metrics-governance.json
-            reports/frontend-metrics-governance.csv
-            reports/frontend-server.log
-            reports/frontend-server.pid
-            cypress/screenshots/**
-            cypress/videos/**
-
-      - name: Merge Cypress mochawesome JSON reports
+          - name: Merge Cypress mochawesome JSON reports
         if: always()
         run: |
           mkdir -p reports
@@ -188,3 +170,23 @@ jobs:
           fs.writeFileSync(path.join(reportsDir, 'cypress-report-merged.json'), JSON.stringify(merged, null, 2), 'utf8');
           console.log('Merged reports:', files.join(', '));
           NODE
+
+      - name: Generate Frontend Metrics
+        run: npm run frontend-metrics
+
+      - name: Upload Cypress and Metrics Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-metrics
+          path: |
+            reports/cypress-report-merged.json
+            reports/cypress-report*.json
+            reports/frontend-metrics-governance.json
+            reports/frontend-metrics-governance.csv
+            reports/frontend-server.log
+            reports/frontend-server.pid
+            cypress/screenshots/**
+            cypress/videos/**
+
+      
