@@ -88,6 +88,12 @@ jobs:
           reporter: json
           reporter-options: outputPath=reports/cypress-report.json
 
+      - name: Move Cypress Report to Reports Directory
+        run: mv cypress-report.json reports/cypress-report.json
+
+      - name: Generate Frontend Metrics
+        run: npm run frontend-metrics
+
       - name: Generate Frontend Metrics
         run: npm run frontend-metrics
 
