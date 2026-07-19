@@ -97,6 +97,7 @@ jobs:
         run: |
           mkdir -p reports
           npx cypress run --reporter json --reporter-options outputPath=reports/cypress-report.json --browser chrome
+          echo "REPORTS DIR CONTENTS:"
           ls -la reports
 
       - name: Generate Frontend Metrics
