@@ -8,7 +8,7 @@
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
-    "cypress:run:ci": "npx cypress run --reporter json --reporter-options outputPath=reports/cypress-report.json --browser chrome",
+    "cypress:ci": "npx cypress run --reporter json --reporter-options outputPath=reports/cypress-report.json --browser chrome",
     "frontend-metrics": "node scripts/parse-frontend-metrics.js"
   },
   "private": true,
