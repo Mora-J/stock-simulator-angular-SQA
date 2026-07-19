@@ -84,8 +84,12 @@ jobs:
           wait-on: 'http://localhost:4200'
           wait-on-timeout: 120
           browser: chrome
-          command: npx cypress run --reporter json > reports/cypress-report.json
-
+          # Usamos un comando multilínea para asegurar que la carpeta exista 
+          # y dejamos que Cypress maneje nativamente la creación del JSON
+          command: |
+            mkdir -p reports
+            npx cypress run --reporter json --reporter-options "outputPath=reports/cypress-report.json" --browser chrome
+            
       - name: Generate Frontend Metrics
         run: npm run frontend-metrics
 
