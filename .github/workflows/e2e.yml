@@ -84,7 +84,7 @@ jobs:
           wait-on: 'http://localhost:4200'
           wait-on-timeout: 120
           browser: chrome
-          command: npx cypress run --reporter json --reporter-options outputPath=reports/cypress-report.json --browser chrome
+          command: npx cypress run --reporter json > reports/cypress-report.json
 
       - name: Generate Frontend Metrics
         run: npm run frontend-metrics
