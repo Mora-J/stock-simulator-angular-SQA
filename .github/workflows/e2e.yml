@@ -72,6 +72,11 @@ jobs:
       - name: Install Frontend Dependencies
         run: npm ci
 
+      - name: Save Pipeline Start Timestamp
+        run: |
+          mkdir -p reports
+          date +%s > reports/pipeline-start.txt
+
       - name: Run Cypress E2E Tests
         uses: cypress-io/github-action@v6
         with:
@@ -79,10 +84,18 @@ jobs:
           wait-on: 'http://localhost:4200'
           wait-on-timeout: 120
           browser: chrome
+          command: npx cypress run --reporter json --reporter-options outputPath=reports/cypress-report.json --browser chrome
 
-      - name: Upload Screenshots on Failure
+      - name: Generate Frontend Metrics
+        run: npm run frontend-metrics
+
+      - name: Upload Cypress and Metrics Artifacts
+        if: always()
         uses: actions/upload-artifact@v4
-        if: failure()
         with:
-          name: cypress-screenshots
-          path: cypress/screenshots
+          name: frontend-metrics
+          path: |
+            reports/cypress-report.json
+            reports/frontend-metrics-governance.json
+            reports/frontend-metrics-governance.csv
+            reports/pipeline-start.txt
