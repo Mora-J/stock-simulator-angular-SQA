@@ -66,7 +66,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '18.19.0'
           cache: 'npm'
 
       - name: Install Frontend Dependencies
@@ -77,14 +77,21 @@ jobs:
           mkdir -p reports
           date +%s > reports/pipeline-start.txt
 
+      - name: Start Frontend Server
+        run: |
+          npm start > /dev/null 2>&1 &
+          for i in $(seq 1 60); do
+            if curl --silent --fail http://localhost:4200 > /dev/null 2>&1; then
+              echo "Frontend listo"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Frontend no arrancó en 120s"
+          exit 1
+
       - name: Run Cypress E2E Tests
-        uses: cypress-io/github-action@v6
-        with:
-          start: npm start
-          wait-on: 'http://localhost:4200'
-          wait-on-timeout: 120
-          browser: chrome
-          command: npx cypress run --reporter json --reporter-options outputPath=reports/cypress-report.json --browser chrome
+        run: npx cypress run --reporter json --reporter-options outputPath=reports/cypress-report.json --browser chrome
 
       - name: Generate Frontend Metrics
         run: npm run frontend-metrics
