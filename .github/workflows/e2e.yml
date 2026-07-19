@@ -77,22 +77,28 @@ jobs:
           mkdir -p reports
           date +%s > reports/pipeline-start.txt
 
-      # Ejecuta Cypress de forma nativa guardando el reporte exacto en disco
+      - name: Start Frontend Server
+        run: |
+          mkdir -p reports
+          npm run start -- --host 0.0.0.0 --port 4200 > reports/frontend-server.log 2>&1 &
+          echo $! > reports/frontend-server.pid
+          for i in $(seq 1 60); do
+            if curl --silent --fail http://localhost:4200 > /dev/null 2>&1; then
+              echo "Frontend listo"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Frontend no arrancó en 120s"
+          cat reports/frontend-server.log
+          exit 1
+
       - name: Run Cypress E2E Tests
-        uses: cypress-io/github-action@v6
-        with:
-          start: npm start
-          wait-on: 'http://localhost:4200'
-          wait-on-timeout: 120
-          browser: chrome
-          # Configuramos mochawesome de forma nativa mediante la acción
-          reporter: mochawesome
-          reporter-options: reportDir=reports,reportFilename=cypress-report,html=false,json=true,overwrite=true
+        run: npx cypress run --reporter json --reporter-options outputPath=reports/cypress-report.json --browser chrome
 
       - name: Generate Frontend Metrics
         run: npm run frontend-metrics
 
-      # Removido el duplicado y configurado el cargador de artefactos seguro
       - name: Upload Cypress and Metrics Artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -102,4 +108,7 @@ jobs:
             reports/cypress-report.json
             reports/frontend-metrics-governance.json
             reports/frontend-metrics-governance.csv
-            reports/pipeline-start.txt
+            reports/frontend-server.log
+            reports/frontend-server.pid
+            cypress/screenshots/**
+            cypress/videos/**

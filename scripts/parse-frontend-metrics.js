@@ -1,74 +1,67 @@
-import fs from 'fs/promises';
-import path from 'path';
+const fs = require('fs');
+const path = require('path');
 
-const REPORTS_DIR = path.resolve('reports');
-const CYPRESS_JSON = path.join(REPORTS_DIR, 'cypress-report.json');
-const PIPELINE_START = path.join(REPORTS_DIR, 'pipeline-start.txt');
+const REPORTS_DIR = path.resolve(__dirname, '../reports');
 const OUTPUT_JSON = path.join(REPORTS_DIR, 'frontend-metrics-governance.json');
 const OUTPUT_CSV = path.join(REPORTS_DIR, 'frontend-metrics-governance.csv');
+const PIPELINE_START = path.join(REPORTS_DIR, 'pipeline-start.txt');
+const SCHEDULED_E2E_CASES = 11;
 
-const SCHEDULED_E2E_CASES = 2;
-
-async function exists(filePath) {
-  try {
-    await fs.access(filePath);
-    return true;
-  } catch {
-    return false;
+function ensureReportsDir() {
+  if (!fs.existsSync(REPORTS_DIR)) {
+    fs.mkdirSync(REPORTS_DIR, { recursive: true });
   }
 }
 
-async function readJson(filePath) {
-  const raw = await fs.readFile(filePath, 'utf8');
+function findCypressReport() {
+  if (!fs.existsSync(REPORTS_DIR)) {
+    return null;
+  }
+
+  const files = fs.readdirSync(REPORTS_DIR, { withFileTypes: true });
+  const candidates = [];
+
+  function scan(dir) {
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        scan(fullPath);
+      } else if (
+        entry.isFile() &&
+        entry.name.endsWith('.json') &&
+        !entry.name.includes('frontend-metrics-governance')
+      ) {
+        candidates.push(fullPath);
+      }
+    }
+  }
+
+  scan(REPORTS_DIR);
+  return candidates.length > 0 ? candidates[0] : null;
+}
+
+function readJson(filePath) {
+  const raw = fs.readFileSync(filePath, 'utf8');
   return JSON.parse(raw);
 }
 
-async function main() {
-  let report = { stats: {}, results: [] };
-  let foundReportPath = null;
-
-  // 1. Buscamos de forma dinámica cualquier JSON en la carpeta de reportes
-  if (await exists(REPORTS_DIR)) {
-    const files = await fs.readdir(REPORTS_DIR);
-    // Buscamos un archivo que termine en .json y no sea el de gobernanza que creamos nosotros
-    const jsonReport = files.find(f => f.endsWith('.json') && !f.includes('frontend-metrics-governance'));
-    
-    if (jsonReport) {
-      foundReportPath = path.join(REPORTS_DIR, jsonReport);
-    }
-  }
-
-  // 2. Si no lo encuentra en la carpeta reports, revisamos la ruta por defecto original
-  if (!foundReportPath && await exists(CYPRESS_JSON)) {
-    foundReportPath = CYPRESS_JSON;
-  }
-
-  // 3. Procesamos el archivo encontrado
-  if (!foundReportPath) {
-    console.warn(`⚠️ Advertencia: No se detectó ningún reporte físico de Cypress en la carpeta. Se generarán métricas en cero.`);
-  } else {
-    try {
-      console.log(`📊 Procesando reporte de Cypress hallado en: ${foundReportPath}`);
-      report = await readJson(foundReportPath);
-    } catch (err) {
-      console.error("⚠️ Error leyendo el archivo JSON de Cypress:", err);
-    }
-  }
-
-  // --- El resto de tu lógica de mapeo se mantiene exactamente igual ---
-  const stats = report.stats ?? {};
-  
-  // Mochawesome guarda las pruebas dentro de 'results' o de un árbol de 'suites'. 
-  // Adaptamos la lectura para que soporte tanto el formato nativo de Cypress como el de Mochawesome:
+function buildMetrics(report, reportPath) {
+  const stats = report.stats || {};
   let totalSpecs = 0;
   let failedSpecs = 0;
-  
+
   if (Array.isArray(report.results)) {
     totalSpecs = report.results.length;
-    failedSpecs = report.results.filter((spec) => spec.stats?.failures > 0 || (spec.suites && JSON.stringify(spec.suites).includes('"fail":true'))).length;
-  } else if (stats.suites) {
-    totalSpecs = Number(stats.suites);
-    failedSpecs = Number(stats.failures > 0 ? 1 : 0); // Aproximación segura si viene aplanado
+    failedSpecs = report.results.filter((spec) => {
+      const failures = spec.stats?.failures ?? 0;
+      const containsFailure = failures > 0;
+      const suiteFailure = Boolean(spec.suites && JSON.stringify(spec.suites).includes('"fail":true'));
+      return containsFailure || suiteFailure;
+    }).length;
+  } else if (typeof stats.tests === 'number') {
+    totalSpecs = 1;
+    failedSpecs = stats.failures > 0 ? 1 : 0;
   }
 
   const totalTests = Number(stats.tests ?? 0);
@@ -77,53 +70,114 @@ async function main() {
   const totalPending = Number(stats.pending ?? 0);
   const totalSkipped = Number(stats.skipped ?? 0);
 
-  const scheduledPassRate = Number(((totalPassed / SCHEDULED_E2E_CASES) * 100).toFixed(2));
-  const actualPassRate = Number(((totalPassed / Math.max(totalTests, 1)) * 100).toFixed(2));
+  const e2ePassRatePercent = Number(((totalPassed / SCHEDULED_E2E_CASES) * 100).toFixed(2));
+  const e2eExecutionPassRatePercent = Number(((totalPassed / Math.max(totalTests, 1)) * 100).toFixed(2));
   const blackBoxFailureDensity = Number((failedSpecs / Math.max(totalSpecs, 1)).toFixed(4));
 
   let pipelineLeadTimeSeconds = null;
-  if (await exists(PIPELINE_START)) {
-    const startTs = Number((await fs.readFile(PIPELINE_START, 'utf8')).trim());
+  if (fs.existsSync(PIPELINE_START)) {
+    const startTs = Number(fs.readFileSync(PIPELINE_START, 'utf8').trim());
     pipelineLeadTimeSeconds = Math.max(0, Math.floor(Date.now() / 1000) - startTs);
   }
 
-  const metrics = {
-    reportGeneratedAt: new Date().toISOString(),
-    scheduledE2eCases: SCHEDULED_E2E_CASES,
-    totalSpecsExecuted: totalSpecs,
-    totalTestsExecuted: totalTests,
-    totalPassed: totalPassed,
-    totalFailed: totalFailed,
-    totalPending: totalPending,
-    totalSkipped: totalSkipped,
-    e2ePassRatePercent: scheduledPassRate,
-    e2eExecutionPassRatePercent: actualPassRate,
-    blackBoxFailureDensity: blackBoxFailureDensity,
-    failedSpecs: failedSpecs,
-    successSpecs: totalSpecs - failedSpecs,
-    pipelineLeadTimeSeconds: pipelineLeadTimeSeconds,
+  return {
+    reportPath,
+    reportFound: Boolean(reportPath),
+    reportType: reportPath?.includes('mochawesome') ? 'mochawesome' : 'cypress-json',
+    metrics: {
+      scheduledE2eCases: {
+        value: SCHEDULED_E2E_CASES,
+        description: 'Cantidad total de flujos E2E programados para el pipeline.'
+      },
+      totalSpecsExecuted: {
+        value: totalSpecs,
+        description: 'Número de archivos de especificaciones de Cypress ejecutados.'
+      },
+      totalTestsExecuted: {
+        value: totalTests,
+        description: 'Total de tests ejecutados durante la corrida E2E.'
+      },
+      totalPassed: {
+        value: totalPassed,
+        description: 'Total de tests E2E que pasaron satisfactoriamente.'
+      },
+      totalFailed: {
+        value: totalFailed,
+        description: 'Total de tests E2E que fallaron durante la ejecución.'
+      },
+      totalPending: {
+        value: totalPending,
+        description: 'Total de tests marcados como pendientes.'
+      },
+      totalSkipped: {
+        value: totalSkipped,
+        description: 'Total de tests saltados.'
+      },
+      e2ePassRatePercent: {
+        value: e2ePassRatePercent,
+        description: 'Porcentaje de casos de prueba E2E exitosos respecto al total programado.'
+      },
+      e2eExecutionPassRatePercent: {
+        value: e2eExecutionPassRatePercent,
+        description: 'Porcentaje de pruebas E2E exitosas respecto al total de pruebas ejecutadas.'
+      },
+      blackBoxFailureDensity: {
+        value: blackBoxFailureDensity,
+        description: 'Densidad de fallas de caja negra por cantidad de specs ejecutados.'
+      },
+      failedSpecs: {
+        value: failedSpecs,
+        description: 'Cantidad de archivos de especificación que presentaron al menos una falla.'
+      },
+      successSpecs: {
+        value: totalSpecs - failedSpecs,
+        description: 'Cantidad de archivos de especificación E2E sin fallas.'
+      },
+      pipelineLeadTimeSeconds: {
+        value: pipelineLeadTimeSeconds,
+        description: 'Tiempo total del pipeline desde el inicio hasta el cálculo de métricas.'
+      }
+    }
   };
+}
 
-  await fs.mkdir(REPORTS_DIR, { recursive: true });
-  await fs.writeFile(OUTPUT_JSON, JSON.stringify(metrics, null, 2), 'utf8');
+function writeOutputs(data) {
+  ensureReportsDir();
+  fs.writeFileSync(OUTPUT_JSON, JSON.stringify(data, null, 2), 'utf8');
 
   const csvLines = [
-    'metric,value',
-    `scheduledE2eCases,${metrics.scheduledE2eCases}`,
-    `totalSpecsExecuted,${metrics.totalSpecsExecuted}`,
-    `totalTestsExecuted,${metrics.totalTestsExecuted}`,
-    `totalPassed,${metrics.totalPassed}`,
-    `totalFailed,${metrics.totalFailed}`,
-    `totalPending,${metrics.totalPending}`,
-    `totalSkipped,${metrics.totalSkipped}`,
-    `e2ePassRatePercent,${metrics.e2ePassRatePercent}`,
-    `e2eExecutionPassRatePercent,${metrics.e2eExecutionPassRatePercent}`,
-    `blackBoxFailureDensity,${metrics.blackBoxFailureDensity}`,
-    `failedSpecs,${metrics.failedSpecs}`,
-    `successSpecs,${metrics.successSpecs}`,
-    `pipelineLeadTimeSeconds,${metrics.pipelineLeadTimeSeconds ?? ''}`,
+    'metric,value,description',
+    ...Object.entries(data.metrics).map(([metric, payload]) => {
+      const value = payload.value ?? '';
+      const description = payload.description.replace(/"/g, '""');
+      return `${metric},${value},"${description}"`;
+    })
   ];
 
-  await fs.writeFile(OUTPUT_CSV, csvLines.join('\n'), 'utf8');
-  console.log(`Métricas generadas con éxito en: ${OUTPUT_JSON}`);
+  fs.writeFileSync(OUTPUT_CSV, csvLines.join('\n'), 'utf8');
 }
+
+function main() {
+  ensureReportsDir();
+
+  const reportPath = findCypressReport();
+  let report = { stats: {}, results: [] };
+
+  if (reportPath) {
+    try {
+      report = readJson(reportPath);
+      console.log(`Procesando reporte de Cypress: ${reportPath}`);
+    } catch (error) {
+      console.warn(`No se pudo leer el reporte encontrado: ${reportPath}`);
+      console.warn(error.message);
+    }
+  } else {
+    console.warn('No se encontró ningún reporte de Cypress. Los datos se generarán con valores por defecto.');
+  }
+
+  const metricsData = buildMetrics(report, reportPath);
+  writeOutputs(metricsData);
+  console.log(`Métricas generadas: ${OUTPUT_JSON} y ${OUTPUT_CSV}`);
+}
+
+main();
