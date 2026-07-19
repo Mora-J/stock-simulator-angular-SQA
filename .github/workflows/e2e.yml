@@ -72,13 +72,11 @@ jobs:
       - name: Install Frontend Dependencies
         run: npm ci
 
-      # Mantenemos este paso que crea la carpeta y guarda el timestamp original
       - name: Save Pipeline Start Timestamp
         run: |
           mkdir -p reports
           date +%s > reports/pipeline-start.txt
 
-      # Corregido: Removido el redireccionamiento '>' dañino y configurado el reporte nativo de Cypress
       - name: Run Cypress E2E Tests
         uses: cypress-io/github-action@v6
         with:
@@ -86,12 +84,13 @@ jobs:
           wait-on: 'http://localhost:4200'
           wait-on-timeout: 120
           browser: chrome
-          command: npx cypress run --reporter json --reporter-options "outputPath=reports/cypress-report.json"
+          # Usamos las opciones nativas de la acción para el reportero
+          reporter: json
+          reporter-options: outputPath=reports/cypress-report.json
 
       - name: Generate Frontend Metrics
         run: npm run frontend-metrics
 
-      # Sube los artefactos pase lo que pase para que puedas auditar fallas
       - name: Upload Cypress and Metrics Artifacts
         if: always()
         uses: actions/upload-artifact@v4
