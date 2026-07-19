@@ -98,10 +98,11 @@ jobs:
           mkdir -p reports
           npx cypress run \
             --reporter mochawesome \
-            --reporter-options reportDir=reports,reportFilename=cypress-report,json=true,overwrite=true \
+            --reporter-options reportDir=reports,reportFilename=cypress-report,json=true,html=false,overwrite=false,timestamps=false \
+            --spec "cypress/e2e/**/*.cy.js" \
             --browser chrome
           echo "REPORTS DIR CONTENTS:"
-          ls -la reports
+          find reports -maxdepth 1 -type f | sort
 
       - name: Generate Frontend Metrics
         run: npm run frontend-metrics

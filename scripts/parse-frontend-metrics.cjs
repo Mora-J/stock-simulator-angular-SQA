@@ -5,8 +5,6 @@ const REPORTS_DIR = path.resolve(__dirname, '../reports');
 const OUTPUT_JSON = path.join(REPORTS_DIR, 'frontend-metrics-governance.json');
 const OUTPUT_CSV = path.join(REPORTS_DIR, 'frontend-metrics-governance.csv');
 const PIPELINE_START = path.join(REPORTS_DIR, 'pipeline-start.txt');
-
-// Ajusta a la cantidad real de specs que tienes en Cypress
 const SCHEDULED_E2E_CASES = 6;
 
 function ensureReportsDir() {
@@ -15,31 +13,14 @@ function ensureReportsDir() {
   }
 }
 
-function findCypressReport() {
+function listReportFiles() {
   if (!fs.existsSync(REPORTS_DIR)) {
-    return null;
+    return [];
   }
-
-  const candidates = [];
-
-  function scan(dir) {
-    const entries = fs.readdirSync(dir, { withFileTypes: true });
-    for (const entry of entries) {
-      const fullPath = path.join(dir, entry.name);
-      if (entry.isDirectory()) {
-        scan(fullPath);
-      } else if (
-        entry.isFile() &&
-        entry.name.endsWith('.json') &&
-        !entry.name.includes('frontend-metrics-governance')
-      ) {
-        candidates.push(fullPath);
-      }
-    }
-  }
-
-  scan(REPORTS_DIR);
-  return candidates.length > 0 ? candidates[0] : null;
+  return fs.readdirSync(REPORTS_DIR, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.endsWith('.json'))
+    .map((entry) => path.join(REPORTS_DIR, entry.name))
+    .filter((filePath) => !filePath.includes('frontend-metrics-governance'));
 }
 
 function readJson(filePath) {
@@ -47,22 +28,69 @@ function readJson(filePath) {
   return JSON.parse(raw);
 }
 
-function buildMetrics(report, reportPath) {
+function mergeReports(reportFiles) {
+  const merged = {
+    stats: {
+      suites: 0,
+      tests: 0,
+      passes: 0,
+      pending: 0,
+      failures: 0,
+      skipped: 0,
+      duration: 0,
+      testsRegistered: 0,
+      start: null,
+      end: null
+    },
+    results: []
+  };
+
+  for (const filePath of reportFiles) {
+    const report = readJson(filePath);
+    const stats = report.stats || {};
+
+    merged.stats.suites += Number(stats.suites ?? 0);
+    merged.stats.tests += Number(stats.tests ?? 0);
+    merged.stats.passes += Number(stats.passes ?? 0);
+    merged.stats.pending += Number(stats.pending ?? 0);
+    merged.stats.failures += Number(stats.failures ?? 0);
+    merged.stats.skipped += Number(stats.skipped ?? 0);
+    merged.stats.duration += Number(stats.duration ?? 0);
+    merged.stats.testsRegistered += Number(stats.testsRegistered ?? 0);
+
+    if (stats.start) {
+      const startTime = new Date(stats.start).getTime();
+      if (!merged.stats.start || startTime < new Date(merged.stats.start).getTime()) {
+        merged.stats.start = stats.start;
+      }
+    }
+
+    if (stats.end) {
+      const endTime = new Date(stats.end).getTime();
+      if (!merged.stats.end || endTime > new Date(merged.stats.end).getTime()) {
+        merged.stats.end = stats.end;
+      }
+    }
+
+    if (Array.isArray(report.results)) {
+      merged.results.push(...report.results);
+    }
+  }
+
+  return merged;
+}
+
+function buildMetrics(report, reportPath, reportFiles) {
   const stats = report.stats || {};
-  let totalSpecs = 0;
+  const totalSpecs = reportFiles.length;
   let failedSpecs = 0;
 
   if (Array.isArray(report.results)) {
-    totalSpecs = report.results.length;
-    failedSpecs = report.results.filter((spec) => {
-      const failures = spec.stats?.failures ?? 0;
-      const suiteFailure =
-        spec.suites && JSON.stringify(spec.suites).includes('"fail":true');
-      return failures > 0 || suiteFailure;
+    failedSpecs = report.results.filter((result) => {
+      const suiteFailures = (result.stats?.failures ?? 0) > 0;
+      const nestedSuiteFailures = JSON.stringify(result.suites ?? []).includes('"fail":true');
+      return suiteFailures || nestedSuiteFailures;
     }).length;
-  } else if (typeof stats.tests === 'number') {
-    totalSpecs = 1;
-    failedSpecs = stats.failures > 0 ? 1 : 0;
   }
 
   const totalTests = Number(stats.tests ?? 0);
@@ -160,22 +188,19 @@ function writeOutputs(data) {
 function main() {
   ensureReportsDir();
 
-  const reportPath = findCypressReport();
-  let report = { stats: {}, results: [] };
+  const reportFiles = listReportFiles();
+  let reportPath = null;
+  let mergedReport = { stats: {}, results: [] };
 
-  if (reportPath) {
-    try {
-      report = readJson(reportPath);
-      console.log(`Procesando reporte de Cypress: ${reportPath}`);
-    } catch (error) {
-      console.warn(`No se pudo leer el reporte encontrado: ${reportPath}`);
-      console.warn(error.message);
-    }
+  if (reportFiles.length > 0) {
+    reportPath = reportFiles[0];
+    mergedReport = mergeReports(reportFiles);
+    console.log('Archivos de reporte encontrados:', reportFiles);
   } else {
     console.warn('No se encontró ningún reporte de Cypress. Los datos se generarán con valores por defecto.');
   }
 
-  const metricsData = buildMetrics(report, reportPath);
+  const metricsData = buildMetrics(mergedReport, reportPath, reportFiles);
   writeOutputs(metricsData);
   console.log(`Métricas generadas: ${OUTPUT_JSON} y ${OUTPUT_CSV}`);
 }
