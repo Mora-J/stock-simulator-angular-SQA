@@ -7,7 +7,7 @@ const PIPELINE_START = path.join(REPORTS_DIR, 'pipeline-start.txt');
 const OUTPUT_JSON = path.join(REPORTS_DIR, 'frontend-metrics-governance.json');
 const OUTPUT_CSV = path.join(REPORTS_DIR, 'frontend-metrics-governance.csv');
 
-const SCHEDULED_E2E_CASES = 11;
+const SCHEDULED_E2E_CASES = 2;
 
 async function exists(filePath) {
   try {

@@ -85,8 +85,9 @@ jobs:
           wait-on: 'http://localhost:4200'
           wait-on-timeout: 120
           browser: chrome
-          reporter: json
-          reporter-options: outputPath=reports/cypress-report.json
+          # Configuramos mochawesome de forma nativa mediante la acción
+          reporter: mochawesome
+          reporter-options: reportDir=reports,reportFilename=cypress-report,html=false,json=true,overwrite=true
 
       - name: Generate Frontend Metrics
         run: npm run frontend-metrics
