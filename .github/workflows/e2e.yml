@@ -189,4 +189,40 @@ jobs:
             cypress/screenshots/**
             cypress/videos/**
 
-      
+  push-to-central-dashboard:
+    needs: cypress-run
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download frontend governance artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-metrics
+          path: artifacts
+
+      - name: Push to Central Dashboard Repository
+        env:
+          # Token personal de GitHub con permisos de escritura (el mismo que usaste en el backend)
+          GH_TOKEN: ${{ secrets.DASHBOARD_WRITE_TOKEN }}
+        run: |
+          # 1. Clonar el repositorio central
+          git clone https://x-access-token:${GH_TOKEN}@github.com/Mora-J/stock-simulator-dashboard-SQA.git dashboard-repo
+          cd dashboard-repo
+          
+          # 2. Crear la estructura de carpetas para el frontend
+          mkdir -p frontend-data/metrics
+          mkdir -p frontend-data/reports/cypress
+          
+          # 3. Copiar las métricas y el reporte unificado (ignoramos logs y pids)
+          cp ../artifacts/reports/frontend-metrics-governance.json frontend-data/metrics/
+          cp ../artifacts/reports/frontend-metrics-governance.csv frontend-data/metrics/
+          cp ../artifacts/reports/cypress-report-merged.json frontend-data/reports/cypress/
+          
+          # 4. Configurar Git y hacer el Push
+          git config user.name "QAOps Frontend Bot"
+          git config user.email "qaops-bot@github.com"
+          
+          git add frontend-data/
+          
+          # 5. Hacer commit y push solo si hay cambios reales
+          git diff-index --quiet HEAD || git commit -m "chore(qa): update frontend metrics and reports [skip ci]"
+          git push origin main   
