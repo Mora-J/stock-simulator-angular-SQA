@@ -25,24 +25,51 @@ async function readJson(filePath) {
 
 async function main() {
   let report = { stats: {}, results: [] };
+  let foundReportPath = null;
 
-  // Corrección: Si no se encuentra el archivo, no rompemos el flujo. 
-  // Capturamos datos vacíos de control para que el pipeline continúe con éxito.
-  if (!await exists(CYPRESS_JSON)) {
-    console.warn(`⚠️ Advertencia: No se encontró el reporte en ${CYPRESS_JSON}. Se generarán métricas en cero.`);
+  // 1. Buscamos de forma dinámica cualquier JSON en la carpeta de reportes
+  if (await exists(REPORTS_DIR)) {
+    const files = await fs.readdir(REPORTS_DIR);
+    // Buscamos un archivo que termine en .json y no sea el de gobernanza que creamos nosotros
+    const jsonReport = files.find(f => f.endsWith('.json') && !f.includes('frontend-metrics-governance'));
+    
+    if (jsonReport) {
+      foundReportPath = path.join(REPORTS_DIR, jsonReport);
+    }
+  }
+
+  // 2. Si no lo encuentra en la carpeta reports, revisamos la ruta por defecto original
+  if (!foundReportPath && await exists(CYPRESS_JSON)) {
+    foundReportPath = CYPRESS_JSON;
+  }
+
+  // 3. Procesamos el archivo encontrado
+  if (!foundReportPath) {
+    console.warn(`⚠️ Advertencia: No se detectó ningún reporte físico de Cypress en la carpeta. Se generarán métricas en cero.`);
   } else {
     try {
-      report = await readJson(CYPRESS_JSON);
+      console.log(`📊 Procesando reporte de Cypress hallado en: ${foundReportPath}`);
+      report = await readJson(foundReportPath);
     } catch (err) {
       console.error("⚠️ Error leyendo el archivo JSON de Cypress:", err);
     }
   }
 
+  // --- El resto de tu lógica de mapeo se mantiene exactamente igual ---
   const stats = report.stats ?? {};
-  const totalSpecs = Array.isArray(report.results) ? report.results.length : 0;
-  const failedSpecs = Array.isArray(report.results)
-    ? report.results.filter((spec) => spec.stats?.failures > 0).length
-    : 0;
+  
+  // Mochawesome guarda las pruebas dentro de 'results' o de un árbol de 'suites'. 
+  // Adaptamos la lectura para que soporte tanto el formato nativo de Cypress como el de Mochawesome:
+  let totalSpecs = 0;
+  let failedSpecs = 0;
+  
+  if (Array.isArray(report.results)) {
+    totalSpecs = report.results.length;
+    failedSpecs = report.results.filter((spec) => spec.stats?.failures > 0 || (spec.suites && JSON.stringify(spec.suites).includes('"fail":true'))).length;
+  } else if (stats.suites) {
+    totalSpecs = Number(stats.suites);
+    failedSpecs = Number(stats.failures > 0 ? 1 : 0); // Aproximación segura si viene aplanado
+  }
 
   const totalTests = Number(stats.tests ?? 0);
   const totalPassed = Number(stats.passes ?? 0);
@@ -100,8 +127,3 @@ async function main() {
   await fs.writeFile(OUTPUT_CSV, csvLines.join('\n'), 'utf8');
   console.log(`Métricas generadas con éxito en: ${OUTPUT_JSON}`);
 }
-
-main().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
