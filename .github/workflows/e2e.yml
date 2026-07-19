@@ -96,7 +96,10 @@ jobs:
       - name: Run Cypress E2E Tests
         run: |
           mkdir -p reports
-          npx cypress run --reporter json --reporter-options outputPath=reports/cypress-report.json --browser chrome
+          npx cypress run \
+            --reporter mochawesome \
+            --reporter-options reportDir=reports,reportFilename=cypress-report,json=true,overwrite=true \
+            --browser chrome
           echo "REPORTS DIR CONTENTS:"
           ls -la reports
 
