@@ -78,18 +78,13 @@ jobs:
           date +%s > reports/pipeline-start.txt
 
       - name: Run Cypress E2E Tests
-        uses: cypress-io/github-action@v6
-        with:
-          start: npm start
-          wait-on: 'http://localhost:4200'
-          wait-on-timeout: 120
-          browser: chrome
-          # Usamos las opciones nativas de la acción para el reportero
-          reporter: json
-          reporter-options: outputPath=reports/cypress-report.json
-
-      - name: Move Cypress Report to Reports Directory
-        run: mv cypress-report.json reports/cypress-report.json
+        run: |
+                # Iniciamos el servidor de Angular en segundo plano
+                npm start &
+                # Esperamos de forma segura a que el puerto 4200 responda antes de continuar
+                npx wait-on http://localhost:4200 --timeout 120000
+                # Ejecutamos Cypress forzando la creación exacta del JSON en la carpeta reports
+                npx cypress run --output-path reports/cypress-report.json
 
       - name: Generate Frontend Metrics
         run: npm run frontend-metrics
