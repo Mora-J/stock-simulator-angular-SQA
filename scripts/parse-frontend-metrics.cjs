@@ -5,6 +5,8 @@ const REPORTS_DIR = path.resolve(__dirname, '../reports');
 const OUTPUT_JSON = path.join(REPORTS_DIR, 'frontend-metrics-governance.json');
 const OUTPUT_CSV = path.join(REPORTS_DIR, 'frontend-metrics-governance.csv');
 const PIPELINE_START = path.join(REPORTS_DIR, 'pipeline-start.txt');
+
+// Ajusta a la cantidad real de specs que tienes en Cypress
 const SCHEDULED_E2E_CASES = 6;
 
 function ensureReportsDir() {

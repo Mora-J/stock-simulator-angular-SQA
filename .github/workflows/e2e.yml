@@ -94,7 +94,10 @@ jobs:
           exit 1
 
       - name: Run Cypress E2E Tests
-        run: npx cypress run --reporter json --reporter-options outputPath=reports/cypress-report.json --browser chrome
+        run: |
+          mkdir -p reports
+          npx cypress run --reporter json --reporter-options outputPath=reports/cypress-report.json --browser chrome
+          ls -la reports
 
       - name: Generate Frontend Metrics
         run: npm run frontend-metrics
