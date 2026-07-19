@@ -113,10 +113,78 @@ jobs:
         with:
           name: frontend-metrics
           path: |
-            reports/cypress-report.json
+            reports/cypress-report-merged.json
+            reports/cypress-report*.json
             reports/frontend-metrics-governance.json
             reports/frontend-metrics-governance.csv
             reports/frontend-server.log
             reports/frontend-server.pid
             cypress/screenshots/**
             cypress/videos/**
+
+      - name: Merge Cypress mochawesome JSON reports
+        if: always()
+        run: |
+          mkdir -p reports
+          node <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+          const reportsDir = path.resolve('reports');
+          const files = fs.readdirSync(reportsDir)
+            .filter(f => f.startsWith('cypress-report') && f.endsWith('.json'));
+
+          if (files.length === 0) {
+            console.error('No se encontraron reportes JSON de mochawesome en reports/');
+            process.exit(1);
+          }
+
+          const merged = {
+            stats: {
+              suites: 0,
+              tests: 0,
+              passes: 0,
+              pending: 0,
+              failures: 0,
+              skipped: 0,
+              duration: 0,
+              testsRegistered: 0,
+              start: null,
+              end: null
+            },
+            results: []
+          };
+
+          for (const file of files) {
+            const report = JSON.parse(fs.readFileSync(path.join(reportsDir, file), 'utf8'));
+            const stats = report.stats || {};
+
+            merged.stats.suites += Number(stats.suites ?? 0);
+            merged.stats.tests += Number(stats.tests ?? 0);
+            merged.stats.passes += Number(stats.passes ?? 0);
+            merged.stats.pending += Number(stats.pending ?? 0);
+            merged.stats.failures += Number(stats.failures ?? 0);
+            merged.stats.skipped += Number(stats.skipped ?? 0);
+            merged.stats.duration += Number(stats.duration ?? 0);
+            merged.stats.testsRegistered += Number(stats.testsRegistered ?? 0);
+
+            if (stats.start) {
+              const startTime = new Date(stats.start).getTime();
+              if (!merged.stats.start || startTime < new Date(merged.stats.start).getTime()) {
+                merged.stats.start = stats.start;
+              }
+            }
+            if (stats.end) {
+              const endTime = new Date(stats.end).getTime();
+              if (!merged.stats.end || endTime > new Date(merged.stats.end).getTime()) {
+                merged.stats.end = stats.end;
+              }
+            }
+
+            if (Array.isArray(report.results)) {
+              merged.results.push(...report.results);
+            }
+          }
+
+          fs.writeFileSync(path.join(reportsDir, 'cypress-report-merged.json'), JSON.stringify(merged, null, 2), 'utf8');
+          console.log('Merged reports:', files.join(', '));
+          NODE

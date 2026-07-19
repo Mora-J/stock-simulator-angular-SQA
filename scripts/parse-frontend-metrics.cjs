@@ -93,13 +93,14 @@ function buildMetrics(report, reportPath, reportFiles) {
     }).length;
   }
 
+  const successfulSpecs = totalSpecs - failedSpecs;
   const totalTests = Number(stats.tests ?? 0);
   const totalPassed = Number(stats.passes ?? 0);
   const totalFailed = Number(stats.failures ?? 0);
   const totalPending = Number(stats.pending ?? 0);
   const totalSkipped = Number(stats.skipped ?? 0);
 
-  const e2ePassRatePercent = Number(((totalPassed / SCHEDULED_E2E_CASES) * 100).toFixed(2));
+  const e2ePassRatePercent = Number(((successfulSpecs / SCHEDULED_E2E_CASES) * 100).toFixed(2));
   const e2eExecutionPassRatePercent = Number(((totalPassed / Math.max(totalTests, 1)) * 100).toFixed(2));
   const blackBoxFailureDensity = Number((failedSpecs / Math.max(totalSpecs, 1)).toFixed(4));
 
@@ -159,7 +160,7 @@ function buildMetrics(report, reportPath, reportFiles) {
         description: 'Cantidad de archivos de especificación que presentaron al menos una falla.'
       },
       successSpecs: {
-        value: totalSpecs - failedSpecs,
+        value: successfulSpecs,
         description: 'Cantidad de archivos de especificación E2E sin fallas.'
       },
       pipelineLeadTimeSeconds: {
